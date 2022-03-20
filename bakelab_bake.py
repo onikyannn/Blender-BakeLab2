@@ -541,7 +541,11 @@ class Baker(Operator):
                     self.passes_to_emit_node(mat, 'Albedo,Color,Base Color,Col,Paint Color')
                 if map.type == 'Displacement':
                     self.displacement_to_color(mat)
-                    
+                if map.type == 'Diffuse':
+                    for n in mat.node_tree.nodes:
+                        if n.type == 'BSDF_PRINCIPLED':
+                            n.inputs["Metallic"].default_value = 0
+
         ###################
         
         SelectObject(dst_obj)
