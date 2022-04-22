@@ -2,8 +2,8 @@ import os
 import bpy
 
 from bpy.types import (
-            Operator, 
-            PropertyGroup, 
+            Operator,
+            PropertyGroup,
             Panel
         )
 from bpy.props import (
@@ -24,33 +24,33 @@ from .bakelab_tools import (
     SelectObjects,
     IsValidMesh
 )
-    
+
 class Baker(Operator):
     """Bake"""
     bl_label = "BakeLab Bake"
     bl_info = "BakeLab"
     bl_idname = "bakelab.bake"
     bl_options = {'REGISTER', 'UNDO'}
-    
+
     _timer = None
     TMP_EMPTY_MAT_NAME = "BAKELAB_TMP_EMPTY_MAT"
     TMP_IMAGE_NODE_NAME = "BAKELAB_TMP_IMAGE_NODE"
-    
+
     def save_defaults(self, context):
         scene = context.scene
         render = scene.render
-        
+
         # Image settings{
         img_settings = render.image_settings
         self.default_image_format = img_settings.file_format
         self.default_color_mode   = img_settings.color_mode
         self.default_color_depth  = img_settings.color_depth
-        
+
         self.default_compression  = img_settings.compression
         self.default_quality      = img_settings.quality
         self.default_exr_codec    = img_settings.exr_codec
         # }
-        
+
         # Scene settings{
         self.default_active_object = context.active_object
         self.default_selected_objects = context.selected_objects
@@ -58,7 +58,7 @@ class Baker(Operator):
         self.default_cycles_device = scene.cycles.device
         self.default_cycles_pause = scene.cycles.preview_pause
         # }
-        
+
         # Bake settings{
         bake_settings = context.scene.render.bake
         self.default_use_s2a = bake_settings.use_selected_to_active
@@ -68,45 +68,45 @@ class Baker(Operator):
         self.default_bake_margin    = bake_settings.margin
         self.default_samples = scene.cycles.samples
         self.default_normal_space = bake_settings.normal_space
-        
+
         self.default_use_pass_direct   = bake_settings.use_pass_direct
         self.default_use_pass_indirect = bake_settings.use_pass_indirect
         self.default_use_pass_color    = bake_settings.use_pass_color
-        
+
         self.default_use_pass_diffuse  = bake_settings.use_pass_diffuse
         self.default_use_pass_glossy   = bake_settings.use_pass_glossy
         self.default_use_pass_trans    = bake_settings.use_pass_transmission
         #self.default_use_pass_sss      = bake_settings.use_pass_subsurface # No Longer in 2.83
         #self.default_use_pass_ao       = bake_settings.use_pass_ambient_occlusion # No Longer in 3.0
         self.default_use_pass_emit     = bake_settings.use_pass_emit
-    
+
         self.default_use_cage          = bake_settings.use_cage
         self.default_cage_extrusion    = bake_settings.cage_extrusion
         self.default_cage_object       = bake_settings.cage_object
         # }
-        
+
     def restore_defaults(self, context):
         scene = context.scene
         render = scene.render
-        
+
         # Image settings{
         img_settings = render.image_settings
         img_settings.file_format         = self.default_image_format
         img_settings.color_mode          = self.default_color_mode
         img_settings.color_depth         = self.default_color_depth
-        
+
         img_settings.compression         = self.default_compression
         img_settings.quality             = self.default_quality
         img_settings.exr_codec           = self.default_exr_codec
         # }
-        
+
         # Scene settings{
         SelectObjects(self.default_active_object, self.default_selected_objects)
         render.engine = self.default_engine
         scene.cycles.device = self.default_cycles_device
         scene.cycles.preview_pause = self.default_cycles_pause
         # }
-        
+
         # Bake settings{
         bake_settings = context.scene.render.bake
         bake_settings.use_selected_to_active = self.default_use_s2a
@@ -116,23 +116,23 @@ class Baker(Operator):
         bake_settings.margin  = self.default_bake_margin
         scene.cycles.samples = self.default_samples
         bake_settings.normal_space             = self.default_normal_space
-        
+
         bake_settings.use_pass_direct          = self.default_use_pass_direct
         bake_settings.use_pass_indirect        = self.default_use_pass_indirect
         bake_settings.use_pass_color           = self.default_use_pass_color
-    
+
         bake_settings.use_pass_diffuse           = self.default_use_pass_diffuse
         bake_settings.use_pass_glossy            = self.default_use_pass_glossy
         bake_settings.use_pass_transmission      = self.default_use_pass_trans
         #bake_settings.use_pass_subsurface        = self.default_use_pass_sss # No Longer in 2.83
         #bake_settings.use_pass_ambient_occlusion = self.default_use_pass_ao # No Longer in 3.0
         bake_settings.use_pass_emit              = self.default_use_pass_emit
-    
+
         bake_settings.use_cage                 = self.default_use_cage
         bake_settings.cage_extrusion           = self.default_cage_extrusion
         bake_settings.cage_object              = self.default_cage_object
         # }
-    
+
     def passes_to_rgb(self, node, src_socket, nodes, links, passes):
         has_bsdf_inputs = False
         for input in node.inputs:
@@ -141,7 +141,7 @@ class Baker(Operator):
                 if len(input.links):
                     self.passes_to_rgb(input.links[0].from_node, input,
                                     nodes, links, passes)
-        
+
         if not has_bsdf_inputs:
             emit = nodes.new(type = 'ShaderNodeEmission')
             emit.inputs[0].default_value = 0, 0, 0, 0
@@ -173,13 +173,13 @@ class Baker(Operator):
                         emit.inputs[0].default_value[1] = pass_input.default_value
                         emit.inputs[0].default_value[2] = pass_input.default_value
                         emit.inputs[0].default_value[3] = 1
-    
+
     def passes_to_emit_node(self, mat, passes):
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
-        
+
         out = self.find_node(nodes, 'OUTPUT_MATERIAL')
-            
+
         if out:
         #### Modify Nodes
             split_passes = passes.split(',')
@@ -192,7 +192,7 @@ class Baker(Operator):
             emit = nodes.new(type = 'ShaderNodeEmission')
             emit.inputs[0].default_value = 0, 0, 0, 0
             links.new(emit.outputs[0], out.inputs[0])
-            
+
     def copy_node(self, dst_nodes, node):
         try:
             new_node = dst_nodes.new(type = node.bl_idname)
@@ -213,7 +213,7 @@ class Baker(Operator):
                         hasattr(dst_input, 'default_value'):
                     dst_input.default_value = src_input.default_value
         return new_node
-    
+
     def find_node(self, nodes, type):
         for node in nodes:
             if node.type == type:
@@ -223,25 +223,25 @@ class Baker(Operator):
                 else:
                     return node
         return None
-    
+
     def get_socket(self, sockets, identifier):
         for socket in sockets:
             if socket.identifier == identifier:
                 return socket
         return None
-    
+
     def extract_nodes_rc(
                 self, gr_node, gr_in, gr_out,
                 nodes, links, n_group, node_dict):
         if gr_node.name in node_dict:
             return node_dict[gr_node.name]
-        
+
         node = self.copy_node(nodes, gr_node)
         node_dict[gr_node.name] = node
-        
+
         if node is None:
             return None
-        
+
         ### Inputs {
         for src_input in gr_node.inputs:
             dst_input = self.get_socket(node.inputs, src_input.identifier)
@@ -249,7 +249,7 @@ class Baker(Operator):
                 continue
             for link in src_input.links:
                 from_node = link.from_node
-                
+
                 if from_node == gr_in:
                     ng_input = self.get_socket(n_group.inputs, link.from_socket.identifier)
                     if ng_input is None:
@@ -273,7 +273,7 @@ class Baker(Operator):
                 continue
             for link in src_output.links:
                 to_node = link.to_node
-                
+
                 if to_node == gr_out:
                     ng_output = self.get_socket(n_group.outputs, link.to_socket.identifier)
                     if ng_output is None:
@@ -290,7 +290,7 @@ class Baker(Operator):
                             links.new(dst_output, link_input)
         ### }
         return node
-    
+
     def ungroup_nodes(self, node_tree):
         nodes = node_tree.nodes
         links = node_tree.links
@@ -301,14 +301,14 @@ class Baker(Operator):
                 if node.type != 'GROUP':
                     continue
                 group_exists = True
-                
+
                 node_dict = {}
                 gr_nodes = node.node_tree.nodes
                 gr_in  = self.find_node(gr_nodes, 'GROUP_INPUT')
                 gr_out = self.find_node(gr_nodes, 'GROUP_OUTPUT')
                 if gr_in is None: continue
                 if gr_out is None: continue
-                
+
                 for gr_node in gr_nodes:
                     if gr_node == gr_in:
                         continue
@@ -321,11 +321,11 @@ class Baker(Operator):
                 nodes.remove(node)
             if not group_exists:
                 break
-            
+
     def displacement_to_color(self, mat):
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
-        
+
         out = self.find_node(nodes, 'OUTPUT_MATERIAL')
         if out == None:
             return
@@ -338,19 +338,19 @@ class Baker(Operator):
             from_socket = out.inputs[2].links[0].from_socket
             v_transform = nodes.new(type = 'ShaderNodeVectorTransform')
             links.remove(out.inputs[2].links[0])
-            
+
             links.new(from_socket, v_transform.inputs[0])
             links.new(v_transform.outputs[0], out.inputs[0])
-    
+
     def init_bake_settings(self, context, map):
         context.scene.cycles.samples = map.samples
         bake_settings = context.scene.render.bake
         bake_settings.normal_space             = map.normal_space
-        
+
         if map.type == 'Combined':
             bake_settings.use_pass_direct            = map.combined_direct
             bake_settings.use_pass_indirect          = map.combined_indirect
-    
+
             bake_settings.use_pass_diffuse           = map.combined_diffuse
             bake_settings.use_pass_glossy            = map.combined_glossy
             bake_settings.use_pass_transmission      = map.combined_transmission
@@ -361,7 +361,7 @@ class Baker(Operator):
             bake_settings.use_pass_direct          = map.bake_direct
             bake_settings.use_pass_indirect        = map.bake_indirect
             bake_settings.use_pass_color           = map.bake_color
-        
+
         m_type = map.type
         if m_type == 'Albedo':
             bake_type = 'EMIT'
@@ -392,26 +392,30 @@ class Baker(Operator):
         if m_type == 'CustomPass':
             bake_type = 'EMIT'
         return bake_type
-    
+
     def calc_surf_area(self, obj):
         import bmesh
         bm = bmesh.new(use_operators=False)
         bm.from_mesh(obj.data)
         bm.transform(obj.matrix_world)
         bm.faces.ensure_lookup_table()
-        
+
         area = 0.0
         for face in bm.faces:
             area += face.calc_area()
         return area
-    
+
     def round_to_power_of_2(self, num):
         return pow(2,round(log2(num)))
-    
+
+    def clamp(self, min_value, num, max_value):
+        num = max(min(num, max_value), min_value)
+        return num
+
     def PrepareImage(self, context, map, objs, name):
         props = context.scene.BakeLabProps
         self.SetSaveImageSettings(context, map)
-        
+
         if props.image_size == 'FIXED':
             map.target_width  = map.width
             map.target_height = map.height
@@ -422,15 +426,18 @@ class Baker(Operator):
             size = pow(area, 0.5) * props.texel_per_unit
             if props.round_adaptive_image:
                 size = self.round_to_power_of_2(size)
+            else:
+                size = self.clamp(props.image_min_size, round(size), props.image_max_size)
+
             map.target_width  = size
             map.target_height = size
-            
+
         map.final_aa = props.anti_alias
         if map.aa_override > 0:
             map.final_aa = map.aa_override
         bake_image = bpy.data.images.new(
             name = map.img_name.replace('*', name),
-            width  = map.target_width  * map.final_aa, 
+            width  = map.target_width  * map.final_aa,
             height = map.target_height * map.final_aa
         )
         bake_image.use_generated_float = map.float_depth
@@ -444,7 +451,7 @@ class Baker(Operator):
                     bake_image.colorspace_settings.name = 'Non-Colour Data'
             except:
                 self.report(type = {'WARNING'}, message = "Couldn't change color space of image")
-        
+
         context.scene.render.bake.margin = props.bake_margin * map.final_aa
         if props.save_or_pack == 'PACK':
             bake_image.pack()
@@ -456,11 +463,11 @@ class Baker(Operator):
                 extension = '.jpg'
             if map.file_format == 'OPEN_EXR':
                 extension = '.exr'
-            
+
             abs_save_path = bpy.path.abspath(props.save_path)
             if not os.path.isdir(abs_save_path):
                 os.makedirs(abs_save_path, 0o777)
-            
+
             if props.create_folder:
                 if props.bake_mode == "ALL_TO_ONE":
                     bake_image.filepath = abspath(join(abs_save_path, props.folder_name, bake_image.name + extension))
@@ -468,15 +475,15 @@ class Baker(Operator):
                     bake_image.filepath = abspath(join(abs_save_path, name, bake_image.name + extension))
             else:
                 bake_image.filepath = abspath(join(abs_save_path, bake_image.name + extension))
-            
+
             bake_image.save_render(bake_image.filepath)
-        
+
         return bake_image
-    
+
     def SetSaveImageSettings(self, context, map):
         img_settings = context.scene.render.image_settings
         img_settings.file_format = map.file_format
-        
+
         if map.file_format == 'PNG':
             img_settings.color_mode  = map.png_channels
             img_settings.color_depth = map.png_depth
@@ -491,11 +498,11 @@ class Baker(Operator):
                 img_settings.exr_codec    = map.exr_codec_32
             if map.exr_depth == '16':
                 img_settings.exr_codec    = map.exr_codec_16
-    
+
     def ReserveMaterials(self, obj):
         selected_objects = bpy.context.selected_objects
         active_object    = bpy.context.active_object
-        
+
         SelectObject(obj)
         if len(obj.material_slots) == 0:
             bpy.ops.object.material_slot_add()
@@ -504,11 +511,11 @@ class Baker(Operator):
             self.original_materials.append(slot.material)
             if slot.material is not None:
                 slot.material = slot.material.copy()
-        
+
         SelectObjects(active_object,selected_objects)
-        
+
         return (self.object_slots, self.original_materials)
-    
+
     def RestoreMaterials(self):
         for i in range(0, min(len(self.object_slots), len(self.original_materials))):
             if self.object_slots[i] is not None:
@@ -517,11 +524,11 @@ class Baker(Operator):
                 self.object_slots[i].material = self.original_materials[i]
         self.object_slots.clear()
         self.original_materials.clear()
-    
+
     def PrepareMaterials(self, context, dst_obj, src_obj_list, map, bake_image):
         active_obj = context.active_object
         selected_objects = context.selected_objects
-        
+
         for obj in src_obj_list:
             SelectObject(obj)
             if len(obj.material_slots) == 0:
@@ -531,7 +538,7 @@ class Baker(Operator):
                     slot.material = self.GetEmptyMaterial()
                 mat = slot.material
                 mat.use_nodes = True
-                
+
                 if map.type == 'CustomPass':
                     if map.deep_search:
                         self.ungroup_nodes(mat.node_tree)
@@ -547,7 +554,7 @@ class Baker(Operator):
                             n.inputs["Metallic"].default_value = 0
 
         ###################
-        
+
         SelectObject(dst_obj)
         if len(dst_obj.material_slots) == 0:
             bpy.ops.object.material_slot_add()
@@ -563,16 +570,16 @@ class Baker(Operator):
                 img_node.name = self.TMP_IMAGE_NODE_NAME
             mat.node_tree.nodes.active = img_node
             img_node.image = bake_image
-            
+
         SelectObjects(active_obj, selected_objects)
-            
+
     def GetEmptyMaterial(self):
         mat = bpy.data.materials.new(self.TMP_EMPTY_MAT_NAME)
         mat.use_nodes = True
         img_node = mat.node_tree.nodes.new(type = 'ShaderNodeTexImage')
         img_node.name = self.TMP_IMAGE_NODE_NAME
         return mat
-    
+
     def create_merged_object(self, context, object_list):
         ##### Create New Object{
         merged_mesh = bpy.data.meshes.new('BAKELAB_MERGED_MESH_TMP')
@@ -581,12 +588,12 @@ class Baker(Operator):
         context.scene.collection.objects.link(merged_obj)
         merged_mesh.update()
         ##### }
-        
+
         for obj in object_list:
             SelectObject(obj)
             bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
             obj_clone = context.active_object
-            
+
             #### Apply modifiers{
             for modifier in obj_clone.modifiers:
                 if modifier.show_render:
@@ -594,26 +601,26 @@ class Baker(Operator):
                         modifier.levels = modifier.render_levels
                     bpy.ops.object.modifier_apply(modifier = modifier.name)
             ##### }
-            
+
             #### Merge{
             SelectObject(merged_obj)
             obj_clone.select_set(True)
-            
+
             clone_data = obj_clone.data
             bpy.ops.object.join()
             bpy.data.meshes.remove(clone_data)
             #### }
-        
+
         while len(merged_obj.material_slots)>0:
             bpy.ops.object.material_slot_remove()
         merged_mesh.update()
         return merged_obj
-    
+
     def down_scale(self, img, props, map):
         if map.final_aa == 1:
             return
         img.scale(map.target_width, map.target_height)
-    
+
     def UpdateDisplayStatus(self, props, obj, map, image):
         props.baking_obj_name = obj.name
         if map.type == 'CustomPass':
@@ -624,7 +631,7 @@ class Baker(Operator):
         props.baking_map_size = str(map.target_width) + 'x' + str(map.target_height)
         if map.final_aa != 1:
             props.baking_map_size += str(' (' + str(map.final_aa)+'X)')
-    
+
     def Bake(self, context):
         yield 1
         scene = context.scene
@@ -633,7 +640,7 @@ class Baker(Operator):
         self.original_materials = []
         self.object_slots = []
         self.save_defaults(context)
-        
+
         props.bake_state = 'BAKING'
         scene.render.engine = 'CYCLES'
         scene.cycles.device = props.compute_device
@@ -641,8 +648,8 @@ class Baker(Operator):
         scene.render.bake.use_cage = True
         scene.render.bake.cage_extrusion = props.cage_extrusion
         scene.render.bake.cage_object = None
-        
-        
+
+
         if len(self.default_selected_objects) == 0:
             self.report(type = {'ERROR'}, message = 'Select some objects')
             yield -1
@@ -651,11 +658,11 @@ class Baker(Operator):
         if len(selected_objects) == 0:
             self.report(type = {'ERROR'}, message = 'No valid objects selected, see console for more info')
             yield -1
-            
+
         if len(scene.BakeLabMaps) == 0:
             self.report(type = {'ERROR'}, message = 'Add bake maps')
             yield -1
-        
+
         props.baking_map_index = 0
         props.baking_obj_index = 0
         props.baking_map_count = 0
@@ -663,16 +670,16 @@ class Baker(Operator):
             if map.enabled:
                 props.baking_map_count += 1
         props.baking_obj_count = len(selected_objects)
-        
+
         ##########################################################################################
         if props.bake_mode == "INDIVIDUAL":
             for obj in selected_objects:
                 if len(obj.data.uv_layers) == 0:
                     self.report(type = {'ERROR'}, message = 'Not all objects have UV maps')
                     yield -1
-                    
+
             render.bake.use_selected_to_active = False
-            
+
             for obj in selected_objects:
                 # Save baking data {
                 baked_data = scene.BakeLab_Data.add()
@@ -685,14 +692,14 @@ class Baker(Operator):
                     if not map.enabled:
                         continue
                     props.baking_map_index += 1
-                    
+
                     self.ReserveMaterials(obj)
                     bake_image = self.PrepareImage(context, map, {obj}, obj.name)
                     self.PrepareMaterials(context, obj, {obj}, map, bake_image)
                     bake_type = self.init_bake_settings(context, map)
-                    
+
                     self.UpdateDisplayStatus(props,obj,map,bake_image)
-                    
+
                     # Bake {
                     while bpy.ops.object.bake('INVOKE_DEFAULT', type = bake_type) != {'RUNNING_MODAL'}:
                         yield 1
@@ -705,7 +712,7 @@ class Baker(Operator):
                         bake_image.pack()
                     else:
                         bake_image.save_render(bake_image.filepath)
-                    
+
                     baked_data.AddMap(map, bake_image) # Save baking data
                     self.RestoreMaterials()
         ##########################################################################################
@@ -716,40 +723,40 @@ class Baker(Operator):
                     self.report(type = {'ERROR'}, message = 'Not all objects have UV maps')
                     yield -1
             # }
-            
+
              # Save baking data {
             baked_data = scene.BakeLab_Data.add()
             for obj in selected_objects:
                 baked_data.AddObj(obj)
             # }
-            
+
             if props.pre_join_mesh:
                 render.bake.use_selected_to_active = True
                 render.bake.use_cage = True
                 render.bake.cage_extrusion = props.cage_extrusion
-            
+
                 merged_object = self.create_merged_object(context, selected_objects)
                 SelectObjects(merged_object, selected_objects)
             else:
                 render.bake.use_selected_to_active = False
-                
+
             props.baking_map_index = 0
-            
+
             for map in scene.BakeLabMaps:
                 if not map.enabled:
                     continue
                 props.baking_map_index += 1
-                
+
                 if props.pre_join_mesh:
                     for obj in selected_objects:
                         self.ReserveMaterials(obj)
-                    
+
                     bake_image = self.PrepareImage(context, map, {merged_object}, props.global_image_name)
                     self.PrepareMaterials(context, merged_object, selected_objects, map, bake_image)
                     bake_type = self.init_bake_settings(context, map)
-                    
+
                     self.UpdateDisplayStatus(props,obj,map,bake_image)
-                    
+
                     # Bake {
                     while bpy.ops.object.bake('INVOKE_DEFAULT', type = bake_type) != {'RUNNING_MODAL'}:
                         yield 1
@@ -770,24 +777,24 @@ class Baker(Operator):
                     for obj in selected_objects:
                         SelectObject(obj)
                         self.ReserveMaterials(obj)
-                        
+
                         self.PrepareMaterials(context, obj, {obj}, map, bake_image)
                         bake_type = self.init_bake_settings(context, map)
-                        
+
                         self.UpdateDisplayStatus(props, obj, map, bake_image)
-                        
+
                         # Bake {
                         while bpy.ops.object.bake('INVOKE_DEFAULT', type = bake_type) != {'RUNNING_MODAL'}:
                             yield 1
                         while not bake_image.is_dirty:
                             yield 1
                         # }
-                        
+
                         if props.save_or_pack == 'PACK':
                             bake_image.pack()
                         else:
                             bake_image.save_render(bake_image.filepath)
-                        
+
                         self.RestoreMaterials()
 
                     self.down_scale(bake_image, props, map)
@@ -795,7 +802,7 @@ class Baker(Operator):
                         bake_image.pack()
                     else:
                         bake_image.save_render(bake_image.filepath)
-                    
+
                 baked_data.AddMap(map, bake_image) # Save baking data
 
             if props.pre_join_mesh:
@@ -813,41 +820,41 @@ class Baker(Operator):
             if len(active_object.data.uv_layers) == 0:
                 self.report(type = {'ERROR'}, message = 'Active object does not have UV maps')
                 yield -1
-                
+
             render.bake.use_selected_to_active = True
             render.bake.use_cage = True
             render.bake.cage_extrusion = props.cage_extrusion
-            
+
              # Save baking data {
             baked_data = scene.BakeLab_Data.add()
             baked_data.AddObj(active_object)
             # }
-            
+
             SelectObjects(active_object, selected_objects)
-                
+
             props.baking_map_index = 0
-                
+
             for map in scene.BakeLabMaps:
                 if not map.enabled:
                     continue
                 props.baking_map_index += 1
-                
+
                 for obj in selected_objects:
                     self.ReserveMaterials(obj)
-                
+
                 bake_image = self.PrepareImage(context, map, {active_object}, active_object.name)
                 self.PrepareMaterials(
-                    context, 
-                    active_object, 
-                    [obj for obj in selected_objects 
-                        if obj is not active_object], 
-                    map, 
+                    context,
+                    active_object,
+                    [obj for obj in selected_objects
+                        if obj is not active_object],
+                    map,
                     bake_image
                 )
                 bake_type = self.init_bake_settings(context, map)
-                
+
                 self.UpdateDisplayStatus(props,obj,map,bake_image)
-                
+
                 # Bake {
                 while bpy.ops.object.bake('INVOKE_DEFAULT', type = bake_type) != {'RUNNING_MODAL'}:
                     yield 1
@@ -860,14 +867,14 @@ class Baker(Operator):
                     bake_image.pack()
                 else:
                     bake_image.save_render(bake_image.filepath)
-                
+
                 baked_data.AddMap(map, bake_image) # Save baking data
                 self.RestoreMaterials()
         ##########################################################################################
         props.bake_state = 'BAKED'
         yield 0 #Done
-        
-    
+
+
     def modal(self, context, event):
         if event.type in {'RIGHTMOUSE', 'ESC'}:
             self.cancel(context)
@@ -885,11 +892,11 @@ class Baker(Operator):
                 return {'FINISHED'}
 
         return {'RUNNING_MODAL'}
-        
+
     def cancel(self, context):
         context.scene.BakeLabProps.bake_state = 'NONE'
         self.finish(context)
-            
+
     def finish(self, context):
         self.restore_defaults(context)
         if self.BakeCrt.gi_running:
